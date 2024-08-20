@@ -19,10 +19,10 @@ This directory contains the folders `Heuristic`, `LearningCherries`, `NetworkGen
   - `network_gen/tree_to_newick.py`: code for writing a networkx trees to newick format.
 
 It also contains the following execution files:
-- `run_cph.py`: 
-- `test_data_gen.py`:
-- `train_data_gen.py`:
-- `train_rf.py`:
+- `run_cph.py`: code for running trivial random and ML based cherry-picking heuristic.
+- `test_data_gen.py`: code for generating LGT synthetic data.
+- `train_data_gen.py`: code for generating training data, based on LGT synthetic data.
+- `train_rf.py`: code for training the cherry and leaf prediction random forests, based on training data generated in previous execution file.
 
 ## Dependencies
 The following Python (3.10.10) packages are required to run this code: 
