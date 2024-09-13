@@ -367,8 +367,8 @@ class CherryHeight:
         self.comb = pd.DataFrame(index=reducible_pairs, columns=tree_set)
         self.d = cherry_in_forest
 
-        self.dist_n = pd.Series(0, index=reducible_pairs)
-        self.comb_n = pd.Series(0, index=reducible_pairs)
+        self.dist_n = pd.Series(0, index=reducible_pairs, dtype=float)
+        self.comb_n = pd.Series(0, index=reducible_pairs, dtype=float)
 
         for c in unique_cherries:
             for t in reducible_pairs[c]:
@@ -1261,8 +1261,8 @@ class Depth:
         self.d_comb = pd.Series(dtype=float)
         self.d_dist = pd.Series(dtype=float)
 
-        self.tree_comb = pd.Series()
-        self.tree_dist = pd.Series()
+        self.tree_comb = pd.Series(dtype=float)
+        self.tree_dist = pd.Series(dtype=float)
         # distances
         self.tree_level_width_dist = {}
         self.tree_level_dist_id = {}
@@ -1399,8 +1399,8 @@ class Depth:
             del self.tree_level_dist_id[t][x]
 
     def get_tree_leaf_depth_metric(self, tree_set):
-        self.tree_comb = pd.Series(index=tree_set)
-        self.tree_dist = pd.Series(index=tree_set)
+        self.tree_comb = pd.Series(index=tree_set, dtype=float)
+        self.tree_dist = pd.Series(index=tree_set, dtype=float)
         for t, tree in tree_set.items():
             self.metric_per_tree(t, tree)
 

@@ -11,11 +11,11 @@ from learning.dm import get_data
 
 
 def train_cherry(X, Y, name=None, multiclass=False):
-    os.makedirs("data/rf_models/cherry", exist_ok=True)
+    os.makedirs("data/rf_info", exist_ok=True)
     if name is None:
-        model_name = f"data/rf_models/cherry/rf_cherries.joblib"
+        model_name = f"data/rf_cherries.joblib"
     else:
-        model_name = f"data/rf_models/cherry/rf_cherries_{name}.joblib"
+        model_name = f"data/rf_cherries_{name}.joblib"
 
     # split data in train and validation
     X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.1)
@@ -52,7 +52,7 @@ def train_cherry(X, Y, name=None, multiclass=False):
     feature_importance = pd.Series(rf.feature_importances_, index=X.columns).sort_values(ascending=False)
     print("Feature importance:\n")
     print(feature_importance)
-    feature_importance.to_csv(f"data/rf_models/cherry/feat_imp_cherries_{name}.txt")
+    feature_importance.to_csv(f"data/rf_info/feat_imp_cherries_{name}.txt")
 
     # save
     joblib.dump(rf, model_name)
@@ -61,11 +61,11 @@ def train_cherry(X, Y, name=None, multiclass=False):
 
 
 def train_leaf(X, Y, name=None):
-    os.makedirs("data/rf_models/leaf", exist_ok=True)
+    os.makedirs("data", exist_ok=True)
     if name is None:
-        model_name = f"data/rf_models/leaf/rf_leaves.joblib"
+        model_name = f"data/rf_leaves.joblib"
     else:
-        model_name = f"data/rf_models/leaf/rf_leaves_{name}.joblib"
+        model_name = f"data/rf_leaves_{name}.joblib"
 
     # split data in train and validation
     X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.1)
@@ -89,15 +89,15 @@ def train_leaf(X, Y, name=None):
     feature_importance = pd.Series(rf.feature_importances_, index=X.columns).sort_values(ascending=False)
     print("Feature importance:\n")
     print(feature_importance)
-    feature_importance.to_csv(f"data/rf_models/leaf/feat_imp_leaves_{name}.txt")
+    feature_importance.to_csv(f"data/rf_info/feat_imp_leaves_{name}.txt")
 
     # save
     joblib.dump(rf, model_name)
     return scores, train_dur
 
 
-def main():
-    X_cherry, Y_cherry, num_nets = get_data(leaf_data=False)
+def main(args):
+    X_cherry, Y_cherry, num_nets = get_data(leaf_data=False, num_inst=args.n_tr_nets)
     name = f"{num_nets}n"
     acc_cherry, train_dur_cherry = train_cherry(X_cherry, Y_cherry, name=name)
     X_leaf, Y_leaf, _ = get_data(leaf_data=True)
@@ -110,8 +110,11 @@ def main():
     metadata = pd.Series([num_nets, len(X_cherry), *acc_cherry, train_dur_cherry,
                           len(X_leaf), *acc_leaf, train_dur_leaf],
                          index=index, dtype=float)
-    metadata.to_csv(f"data/rf_models/metadata_rf_{name}.txt")
+    metadata.to_csv(f"data/rf_info/metadata_rf_{name}.txt")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--n_tr_nets', type=int, default=-1)
+    args = parser.parse_args()
+    main(args)

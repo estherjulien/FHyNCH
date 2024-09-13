@@ -2,7 +2,7 @@ from test_data_gen import *
 from utils.tree_child_prep import read_tree_set
 from network_gen.network_to_tree import *
 import heuristic.CPH as CPH
-
+from phylox import DiNetwork
 
 from datetime import datetime
 import pandas as pd
@@ -21,7 +21,7 @@ def run_heuristic(tree_set=None, tree_set_newick=None, inst_num=0, repeats=1, ti
                   progress=False, pick_triv=False, pick_ml=False, pick_ml_triv=False,
                   pick_random=False, cherry_model_name=None, leaf_model_name=None, relabel=False,
                   problem_type="", num_chosen_leaves=1, job_id=None,
-                  debug_mode=False, input_trees=False):
+                  debug_mode=False, input_trees=False, return_network=False):
     # READ TREE SET
     now = datetime.now().time()
     if progress:
@@ -76,115 +76,174 @@ def run_heuristic(tree_set=None, tree_set_newick=None, inst_num=0, repeats=1, ti
         print(f"Instance {inst_num} {problem_type}: Finish at {now}")
         print(f"Instance {inst_num} {problem_type}: Computation time heuristic: {tree_set.CPS_Compute_Time}")
         print(f"Instance {inst_num} {problem_type}: Reticulation number = {min(tree_set.RetPerTrial.values())}")
-    return tree_set.RetPerTrial, tree_set.DurationPerTrial, seq, leaf_probs, cherry_probs
+
+    net_newick_str = None
+    if return_network:
+        net_newick_str = DiNetwork.from_cherry_picking_sequence(seq).newick(simple=True)
+
+    return tree_set.RetPerTrial, tree_set.DurationPerTrial, seq, leaf_probs, cherry_probs, net_newick_str
 
 
 def run_CPH(args, retic=None, repeats=1000, time_limit=None,
-            progress=False, file_name="", tree_set_newick="", input_trees=None, job_id=""):
-    # ML MODEL
-    cherry_model_name = f"data/rf_models/cherry/rf_cherries_{args.n_tr_nets}n.joblib"
-    leaf_model_name = f"data/rf_models/leaf/rf_leaves_{args.n_tr_nets}n.joblib"
-
+            progress=False, results_path="", tree_set_newick="", input_trees=None, job_id="",
+            return_network=False):
     # save results
-    if args.test_case == "test/LGT":
-        columns = ["TrivialML", "TrivialRand", "UB"]
-    else:
-        columns = ["TrivialML", "TrivialRand"]
+    columns = []
+    if args.run_multi_ml:
+        columns.append("MultiML")
+    if args.run_trivial_rand:
+        columns.append("TrivialRand")
+    if args.data_from_paper and args.test_path == "test/LGT":
+        columns.append("UB")
     score = pd.DataFrame(
         index=pd.MultiIndex.from_product([[args.inst], ["RetNum", "Time"], np.arange(repeats)]),
         columns=columns, dtype=float)
 
-    # ML Trivial HEURISTIC
-    reps = 1
-    ret_score, time_score, seq_ml_triv, leaf_probs, cherry_probs = run_heuristic(
-        tree_set_newick=tree_set_newick,
-        inst_num=args.inst,
-        repeats=reps,
-        time_limit=time_limit,
-        pick_ml_triv=True,
-        relabel=True,
-        cherry_model_name=cherry_model_name,
-        leaf_model_name=leaf_model_name,
-        problem_type="TrivialML",
-        num_chosen_leaves=args.chosen_leaves,
-        progress=progress,
-        job_id=job_id,
-        input_trees=input_trees)
-    for r, ret in ret_score.items():
-        score.loc[args.inst, "RetNum", r]["TrivialML"] = copy.copy(ret)
-        score.loc[args.inst, "Time", r]["TrivialML"] = copy.copy(time_score[r])
-    ml_triv_time = score.loc[args.inst, "Time", :]["TrivialML"].sum()
-    ml_triv_ret = int(min(score.loc[args.inst, "RetNum"]["TrivialML"]))
+    # MultiML HEURISTIC
+    if args.run_multi_ml:
+        # ML MODEL
+        cherry_model_name = f"data/rf_cherries_{args.n_tr_nets}n.joblib"
+        leaf_model_name = f"data/rf_leaves_{args.n_tr_nets}n.joblib"
+        reps = 1
+        ret_score, time_score, seq_ml_triv, leaf_probs, cherry_probs, multi_ml_net = run_heuristic(
+            tree_set_newick=tree_set_newick,
+            inst_num=args.inst,
+            repeats=reps,
+            time_limit=time_limit,
+            pick_ml_triv=True,
+            relabel=True,
+            cherry_model_name=cherry_model_name,
+            leaf_model_name=leaf_model_name,
+            problem_type="TrivialML",
+            num_chosen_leaves=args.chosen_leaves,
+            progress=progress,
+            job_id=job_id,
+            input_trees=input_trees,
+            return_network=return_network)
+        for r, ret in ret_score.items():
+            score.loc[args.inst, "RetNum", r]["MultiML"] = copy.copy(ret)
+            score.loc[args.inst, "Time", r]["MultiML"] = copy.copy(time_score[r])
+        ml_triv_time = score.loc[args.inst, "Time", :]["MultiML"].sum()
+        ml_triv_ret = int(min(score.loc[args.inst, "RetNum"]["MultiML"]))
+    else:
+        ml_triv_time, ml_triv_ret, multi_ml_net = None, None, None
 
     # TRIVIAL RANDOM
-    ret_score, time_score, seq_tr, _, _ = run_heuristic(
-        tree_set_newick=tree_set_newick,
-        inst_num=args.inst,
-        repeats=repeats,
-        time_limit=ml_triv_time,
-        pick_triv=True,
-        relabel=True,
-        problem_type="TrivialRand",
-        progress=progress,
-        job_id=job_id,
-        input_trees=input_trees)
-    for r, ret in ret_score.items():
-        score.loc[args.inst, "RetNum", r]["TrivialRand"] = copy.copy(ret)
-        score.loc[args.inst, "Time", r]["TrivialRand"] = copy.copy(time_score[r])
-    tr_ret = int(min(score.loc[args.inst, "RetNum"]["TrivialRand"]))
-    tr_time = score.loc[args.inst, "Time"]["TrivialRand"].sum()
+    if args.run_trivial_rand:
+        if args.run_multi_ml and args.multiml_time_limit:
+            tr_time_limit = ml_triv_time
+        else:
+            tr_time_limit = time_limit
 
+        ret_score, time_score, seq_tr, _, _, tr_net= run_heuristic(
+            tree_set_newick=tree_set_newick,
+            inst_num=args.inst,
+            repeats=repeats,
+            time_limit=tr_time_limit,
+            pick_triv=True,
+            relabel=True,
+            problem_type="TrivialRand",
+            progress=progress,
+            job_id=job_id,
+            input_trees=input_trees,
+            return_network=return_network)
+        for r, ret in ret_score.items():
+            score.loc[args.inst, "RetNum", r]["TrivialRand"] = copy.copy(ret)
+            score.loc[args.inst, "Time", r]["TrivialRand"] = copy.copy(time_score[r])
+        tr_time = score.loc[args.inst, "Time"]["TrivialRand"].sum()
+        tr_ret = int(min(score.loc[args.inst, "RetNum"]["TrivialRand"]))
+    else:
+        tr_time, tr_ret, tr_net = None, None, None
     # upper bound of ret
-    idx = pd.IndexSlice
-    if args.test_case == "test/LGT":
+    if args.data_from_paper and args.test_path == "test/LGT":
+        idx = pd.IndexSlice
         score.loc[idx[args.inst, "RetNum", :], "UB"] = retic
         # print results
         print(args.inst, ml_triv_ret, tr_ret, retic, tr_time)
-        os.makedirs("data/test/LGT/results", exist_ok=True)
+        os.makedirs(f"data/{args.test_path}/results", exist_ok=True)
     else:
         print(args.inst, ml_triv_ret, tr_ret, tr_time)
 
-    # SAVE DATAFRAMES
+    # SAVE OUTPUT
     # scores
-    score.dropna(axis=0, how="all").to_pickle(file_name)
+    score_path = results_path + "_retics_time" + ".csv"
+    score.dropna(axis=0, how="all").to_csv(score_path)
 
+    # networks
+    if args.return_network:
+        net_path = results_path + "_networks" + ".txt"
+        f = open(net_path, "w")
+        if args.run_multi_ml:
+            f.write(f"MultiML: " + multi_ml_net + "\n")
+        if args.run_trivial_rand:
+            f.write(f"TrivialRand: " + tr_net + "\n")
+        f.close()
 
 def main(args):
     job_id = f"JOB {args.inst} ("
-    if args.test_case == "test/LGT":
+
+    if not args.data_from_paper:
+        newick = args.input_path
+        results_path = args.results_path
+        input_trees = True
+
+    elif args.data_from_paper and args.test_path == "test/LGT":
         file_info = f"TEST[LGT_L{args.n_leaves}_R{args.n_rets}_T{args.n_trees}_MisL{args.mis_l}_ConE{args.con_e}" \
                     f"_ML[DUO_N{args.n_tr_nets}_CL{args.chosen_leaves}_RF]"
         job_id += f"L{args.n_leaves}, R{args.n_rets}, T{args.n_trees}, MisL{args.mis_l}, ConE{args.con_e}, RF)"
         input_trees = False
-        newick = f"data/{args.test_case}/newick/tree_set_newick_L{args.n_leaves}_R{args.n_rets}_T{args.n_trees}_MisL{args.mis_l}_ConE{args.con_e}_LGT_{args.inst}.txt"
-        file_name = f"data/{args.test_case}/results/heuristic_scores_{file_info}_{args.inst}"
-        file_name += ".pkl"
-    else:
+        newick = f"data/{args.test_path}/newick/tree_set_newick_L{args.n_leaves}_R{args.n_rets}_T{args.n_trees}_MisL{args.mis_l}_ConE{args.con_e}_LGT_{args.inst}.txt"
+        results_path = f"data/{args.test_path}/results/heuristic_scores_{file_info}_{args.inst}"
+        results_path += ".pkl"
+        os.makedirs("data/" + args.test_path + "/results", exist_ok=True)
+    elif args.data_from_paper:
         input_trees = True
-        job_id += f"{args.test_case}, L{args.n_leaves}, T{args.n_trees})"
-        newick = f"data/{args.test_case}/newick/test_T{args.n_trees}_L{args.n_leaves}_MisL{args.mis_l}_{args.inst}.txt"
-        file_name = f"data/{args.test_case}/results/heuristic_scores_T{args.n_trees}_L{args.n_leaves}_MisL{args.mis_l}_{args.inst}"
-        file_name += ".pkl"
+        job_id += f"{args.test_path}, L{args.n_leaves}, T{args.n_trees})"
+        newick = f"data/{args.test_path}/newick/test_T{args.n_trees}_L{args.n_leaves}_MisL{args.mis_l}_{args.inst}.txt"
+        results_path = f"data/{args.test_path}/results/heuristic_scores_T{args.n_trees}_L{args.n_leaves}_MisL{args.mis_l}_{args.inst}"
+        results_path += ".pkl"
+        os.makedirs("data/" + args.test_path + "/results", exist_ok=True)
 
-    os.makedirs("data/" + args.test_case + "/results", exist_ok=True)
+    if args.time_limit == -1:
+        time_limit = None
+    else:
+        time_limit = 60 * args.time_limit
     # RUN CPH
-    run_CPH(args, progress=False, file_name=file_name, tree_set_newick=newick, input_trees=input_trees,
-            job_id=job_id)
+    run_CPH(args, progress=args.verbose, results_path=results_path, time_limit=time_limit, repeats=args.n_triv_rand_its,
+            tree_set_newick=newick, input_trees=input_trees, job_id=job_id, return_network=args.return_network)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--test_case', type=str, default="test/LGT", choices=["test/LGT",
+
+    parser.add_argument('--input_path', type=str, default="", help="The name of the input file that contains the set of"
+                                                                   " input trees in Newick format, one tree per line.")
+    parser.add_argument('--results_path', type=str, default="")
+    parser.add_argument('--run_multi_ml', type=int, default=1, help="Boolean for running MultiML")
+    parser.add_argument('--run_trivial_rand', type=int, default=1, help="Boolean for running TrivialRand")
+    parser.add_argument('--return_network', type=int, default=1, help="Boolean for return network(s) in newick format")
+    parser.add_argument('--time_limit', type=int, default=-1, help="In minutes, -1 is no time limit")
+    parser.add_argument('--verbose', type=int, default=0)
+
+    # arguments for MultiML
+    parser.add_argument('--n_tr_nets', type=int, default=2000)
+    parser.add_argument('--chosen_leaves', type=int, default=1, help="number of chosen leaves per MultiML iteration")
+
+    # arguments for TrivialRand
+    parser.add_argument('--n_triv_rand_its', type=int, default=1000, help="Max number of TrivialRand iterations")
+    parser.add_argument('--multiml_time_limit', type=int, default=1, help="Time limit of TrivialRand equal to duration of MultiML")
+
+    # arguments for experiments paper
+    parser.add_argument('--data_from_paper', type=int, default=0)
+    parser.add_argument('--test_path', type=str, default="test/LGT", choices=["test/LGT",
                                                                               "Beiko/small",
                                                                               "Beiko/large"])
-    parser.add_argument('--inst', type=int)
-    parser.add_argument('--n_trees', type=int)
-    parser.add_argument('--n_leaves', type=int)
+    parser.add_argument('--inst', type=int, default=1)
+    parser.add_argument('--n_trees', type=int, default=20)
+    parser.add_argument('--n_leaves', type=int, default=20)
     parser.add_argument('--n_rets', type=int, default=-1, help="number of reticulations in the reference network")
-    parser.add_argument('--n_tr_nets', type=int, default=2000)
     parser.add_argument('--mis_l', type=int, default=0, help="missing leaves percentage")
     parser.add_argument('--con_e', type=int, default=0, help="contracted edges percentage")
-    parser.add_argument('--chosen_leaves', type=int, default=1, help="number of chosen leaves per MultiML iteration")
 
     args = parser.parse_args()
     main(args)

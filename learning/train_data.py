@@ -55,7 +55,7 @@ def net_to_reduced_trees_duo_model(rng, seed, net, mis_l=0, mis_edge=0, num_red=
     for r in np.arange(num_red+1):
         # ################################# CHERRY/LEAF SELECTION PHASE ##################################
         # PICK TRIVIAL CHERRY
-        chosen_cherry, _ = forest_env.pick_trivial(rng)
+        chosen_cherry, _ = forest_env.pick_trivial(seed)
 
         if chosen_cherry is None:
             triv_picked = False
@@ -127,7 +127,7 @@ def net_to_reduced_trees_duo_model(rng, seed, net, mis_l=0, mis_edge=0, num_red=
 
         # UPDATE LEAF DATA BEFORE PICKING
         st_leaf = time.time()
-        deleted_leaves, _ = leaf_features.update_leaf_features_before(chosen_cherry, forest_env.reducible_pairs, forest_env.trees)
+        deleted_leaves = leaf_features.update_leaf_features_before(chosen_cherry, forest_env.reducible_pairs, forest_env.trees)
         leaf_feat_time += time.time() - st_leaf
 
         # UPDATE TREE HEIGHT FEATURE

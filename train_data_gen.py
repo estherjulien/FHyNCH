@@ -139,10 +139,10 @@ def main(seed, num_red=100, num_chosen_leaves=10, missing_leaves=False):
     if os.path.exists(f"data/train/metadata/train_metadata_{seed}.txt"):
         print(f"JOB {seed} ALREADY COMPLETED")
         return None
-    try:
-        make_train_data(seed, num_red, num_chosen_leaves, missing_leaves)
-    except Exception as e:
-        print(f"JOB {seed}: FAILED - {e}")
+    # try:
+    make_train_data(seed, num_red, num_chosen_leaves, missing_leaves)
+    # except Exception as e:
+    #     print(f"JOB {seed}: FAILED - {e}")
 
 
 if __name__ == "__main__":

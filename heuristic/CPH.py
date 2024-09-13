@@ -8,10 +8,11 @@ import pandas as pd
 import numpy as np
 from copy import deepcopy
 from copy import copy
+
+from Cython.Utils import OrderedSet
+
 from heuristic.features import CherryFeatures, LeafFeatures
 
-import warnings
-warnings.filterwarnings("ignore")
 '''
 This script consists of 4 parts: 
 - Help functions (mainly for handling the input)
@@ -206,7 +207,7 @@ def get_leaves(net):
 
 # Methods for sets of phylogenetic trees
 class Input_Set:
-    def __init__(self, newick_strings=[], tree_set=None, instance=0, leaves=None, job_id=None, debug_mode=False):
+    def __init__(self, newick_strings=[], tree_set=None, instance=0, leaves=None, job_id=None):
         # The dictionary of trees
         self.trees = dict()
         # the set of leaf labels of the trees
@@ -215,7 +216,6 @@ class Input_Set:
         self.leaves = set()
         self.reducible_pairs = dict()
         self.root = -1
-        self.debug_mode = debug_mode
         self.missing_leaves = dict()
         self.added_to_leaf = dict()
         self.leaf_to_tree = dict()
@@ -274,7 +274,6 @@ class Input_Set:
         copy_inputs.labels_reversed = deepcopy(self.labels_reversed, memodict)
         copy_inputs.leaves = deepcopy(self.leaves, memodict)
         copy_inputs.missing_leaves = deepcopy(self.missing_leaves)
-        copy_inputs.debug_mode = deepcopy(self.debug_mode)
         return copy_inputs
 
     # Find new cherry-picking sequences for the trees and update the best found
@@ -308,12 +307,11 @@ class Input_Set:
         # Try as many times as required by the integer 'repeats'
         all_leaf_probs = []
         all_cherry_probs = []
-        for i in np.arange(repeats):
+        for i in range(repeats):
             start_trial = time.time()
-            if self.debug_mode and (not pick_ml_triv or ml_draw) :
+            if progress and (not pick_ml_triv or ml_draw) :
                 print(f"Trial {i}")
 
-            rng = np.random.RandomState(i)
             # RUN HEURISTIC
             new, reduced_trees, leaf_probs, cherry_probs = self.CPHeuristicDuo(progress=progress,
                                                                                pick_triv=pick_triv,
@@ -326,7 +324,7 @@ class Input_Set:
                                                                                ml_draw=ml_draw,
                                                                                problem_type=problem_type,
                                                                                num_chosen_leaves=num_chosen_leaves,
-                                                                               rng=rng,
+                                                                               seed=i,
                                                                                train_phase=train_phase)
             all_leaf_probs.append(leaf_probs)
             all_cherry_probs.append(cherry_probs)
@@ -373,16 +371,16 @@ class Input_Set:
 
     def CPHeuristicDuo(self, progress=False, pick_triv=True, pick_ml=False, pick_ml_triv=False,
                        cherry_model_name=None, leaf_model_name=None, pick_random=False, relabel=False,
-                       ml_draw=False, problem_type=None, num_chosen_leaves=1, rng=None,
+                       ml_draw=False, problem_type=None, num_chosen_leaves=1, seed=None,
                        train_phase=False):
         # Works in a copy of the input trees, copy_of_inputs, because trees have to be reduced somewhere.
         copy_of_inputs = deepcopy(self)
         CPS = []
         reduced_trees = []
-        if self.debug_mode:
-            print(f"\nstart instance {self.instance}")
-        if rng is None:
+        if seed is None:
             rng = np.random
+        else:
+            rng = np.random.RandomState(seed)
         # Make dict of reducible pairs
         leaf_probs = []
         cherry_probs = []
@@ -396,11 +394,7 @@ class Input_Set:
                 print(f"Instance {self.instance} {problem_type}:"
                       f" Initial features found in {np.round(time.time() - start_time_init, 3)}s")
             # open prediction model
-            if leaf_model_name is None:
-                leaf_model_name = "data/rf_models/leaf/rf_leaves_2000n.joblib"
             model_leaf = joblib.load(leaf_model_name)
-            if cherry_model_name is None:
-                cherry_model_name = "data/rf_models/cherry/rf_cherries_2000n.joblib"
             model_cherry = joblib.load(cherry_model_name)
         else:
             leaf_features = None
@@ -416,7 +410,7 @@ class Input_Set:
                 print(f"Instance {self.instance} {problem_type}: {len(copy_of_inputs.trees)} trees left.\n")
 
             if pick_triv or pick_ml_triv:
-                chosen_cherry, triv_picked = copy_of_inputs.pick_trivial(rng)
+                chosen_cherry, triv_picked = copy_of_inputs.pick_trivial(seed)
                 if chosen_cherry is None:
                     pick_random = True
                     if pick_ml_triv:
@@ -472,8 +466,6 @@ class Input_Set:
                     if progress:
                         print(f"Instance {self.instance} {problem_type}: RELABEL chosen cherry = {chosen_cherry}")
                     merged_cherries, relabel_in_tree = copy_of_inputs.relabel_trivial(*chosen_cherry)
-                    if self.debug_mode and relabel_in_tree:
-                        print(f"relabel {chosen_cherry}")
                     if (pick_ml or pick_ml_triv) and relabel_in_tree:
                         leaf_features.relabel_trivial_cherries(*chosen_cherry, len(copy_of_inputs.trees),
                                                                relabel_in_tree)
@@ -493,7 +485,7 @@ class Input_Set:
             new_reduced, deleted_trees = copy_of_inputs.reduce_pair_in_all(chosen_cherry)
             copy_of_inputs.update_reducible_pairs(new_reduced)
             reduced_trees += [new_reduced]
-            if self.debug_mode:
+            if progress:
                 print(f"chosen cherry = {chosen_cherry} in {new_reduced}")
 
             # UPDATE FEATURES AFTER REDUCTION
@@ -623,9 +615,11 @@ class Input_Set:
         return set(reduced_trees_for_pair), deleted_trees
 
     # TRIVIAL CHERRY
-    def pick_trivial(self, rng=None):
-        if rng is None:
+    def pick_trivial(self, seed=None):
+        if seed is None:
             rng = np.random
+        else:
+            rng = np.random.RandomState(seed)
         trivial_cherries = []
         trivial_in_all_cherries = []
         for c, trees in self.reducible_pairs.items():
@@ -637,15 +631,16 @@ class Input_Set:
                 trivial_cherries.append(c)
 
         if trivial_in_all_cherries:
+            trivial_in_all_cherries.sort()
             chosen_cherry = trivial_in_all_cherries[rng.choice(len(trivial_in_all_cherries))]
             triv_picked = False
         elif trivial_cherries:
+            trivial_cherries.sort()
             chosen_cherry = trivial_cherries[rng.choice(len(trivial_cherries))]
             triv_picked = True
         else:
             chosen_cherry = None
             triv_picked = False
-
         return chosen_cherry, triv_picked
 
     def trivial_check(self, c, trees):
