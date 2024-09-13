@@ -52,7 +52,7 @@ def run_heuristic(tree_set=None, tree_set_newick=None, inst_num=0, repeats=1, ti
         f.close()
 
         # Make the set of inputs usable for all algorithms: use the CPH class
-        tree_set = CPH.Input_Set(newick_strings=inputs, instance=inst_num, job_id=job_id, debug_mode=debug_mode)
+        tree_set = CPH.Input_Set(newick_strings=inputs, instance=inst_num, job_id=job_id)
 
     # RUN HEURISTIC CHERRY PICKING SEQUENCE
     # Run the heuristic to find a cherry-picking sequence `seq' for the set of input trees.
@@ -155,7 +155,7 @@ def run_CPH(args, retic=None, repeats=1000, time_limit=None,
     else:
         tr_time, tr_ret, tr_net = None, None, None
     # upper bound of ret
-    if args.data_from_paper and args.test_path == "test/LGT":
+    if args.data_from_paper and args.test_path == "LGT":
         idx = pd.IndexSlice
         score.loc[idx[args.inst, "RetNum", :], "UB"] = retic
         # print results
@@ -174,9 +174,11 @@ def run_CPH(args, retic=None, repeats=1000, time_limit=None,
         net_path = results_path + "_networks" + ".txt"
         f = open(net_path, "w")
         if args.run_multi_ml:
-            f.write(f"MultiML: " + multi_ml_net + "\n")
+            f.write(f"MultiML seq: " + ', '.join([f"({item[0]}, {item[1]})" for item in seq_ml_triv]) + "\n")
+            f.write(f"MultiML newick: " + multi_ml_net + "\n")
         if args.run_trivial_rand:
-            f.write(f"TrivialRand: " + tr_net + "\n")
+            f.write(f"TrivialRand seq: " + ', '.join([f"({item[0]}, {item[1]})" for item in seq_tr]) + "\n")
+            f.write(f"TrivialRand newick: " + tr_net + "\n")
         f.close()
 
 def main(args):
@@ -187,21 +189,19 @@ def main(args):
         results_path = args.results_path
         input_trees = True
 
-    elif args.data_from_paper and args.test_path == "test/LGT":
+    elif args.data_from_paper and args.test_path == "LGT":
         file_info = f"TEST[LGT_L{args.n_leaves}_R{args.n_rets}_T{args.n_trees}_MisL{args.mis_l}_ConE{args.con_e}" \
                     f"_ML[DUO_N{args.n_tr_nets}_CL{args.chosen_leaves}_RF]"
         job_id += f"L{args.n_leaves}, R{args.n_rets}, T{args.n_trees}, MisL{args.mis_l}, ConE{args.con_e}, RF)"
         input_trees = False
         newick = f"data/{args.test_path}/newick/tree_set_newick_L{args.n_leaves}_R{args.n_rets}_T{args.n_trees}_MisL{args.mis_l}_ConE{args.con_e}_LGT_{args.inst}.txt"
         results_path = f"data/{args.test_path}/results/heuristic_scores_{file_info}_{args.inst}"
-        results_path += ".pkl"
         os.makedirs("data/" + args.test_path + "/results", exist_ok=True)
     elif args.data_from_paper:
         input_trees = True
         job_id += f"{args.test_path}, L{args.n_leaves}, T{args.n_trees})"
         newick = f"data/{args.test_path}/newick/test_T{args.n_trees}_L{args.n_leaves}_MisL{args.mis_l}_{args.inst}.txt"
         results_path = f"data/{args.test_path}/results/heuristic_scores_T{args.n_trees}_L{args.n_leaves}_MisL{args.mis_l}_{args.inst}"
-        results_path += ".pkl"
         os.makedirs("data/" + args.test_path + "/results", exist_ok=True)
 
     if args.time_limit == -1:
@@ -235,7 +235,7 @@ if __name__ == "__main__":
 
     # arguments for experiments paper
     parser.add_argument('--data_from_paper', type=int, default=0)
-    parser.add_argument('--test_path', type=str, default="test/LGT", choices=["test/LGT",
+    parser.add_argument('--test_path', type=str, default="LGT", choices=["LGT",
                                                                               "Beiko/small",
                                                                               "Beiko/large"])
     parser.add_argument('--inst', type=int, default=1)

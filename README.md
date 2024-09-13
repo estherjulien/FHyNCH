@@ -88,7 +88,7 @@ python run_cph.py --input_path data/tree_set_newick_test.txt --results_path outp
 ### Benchmark code
 This section includes commands to run the code for a benchmark used in the paper.
 
-**_Generate Test Instances_**
+**_Not required (unzip data/LGT.zip): Generate Test Instances_**
 
 For synthetic LGT-based instances:
 ```commandline
@@ -124,6 +124,6 @@ python run_cph.py --data_from_paper 1 --test_path <> --inst <> --n_trees <> --n_
 
 Example: 
 ```commandline
-python run_cph.py --data_from_paper 1 --test_path test/LGT --inst 1 --n_trees 20 --n_leaves 20 --n_rets 10 --n_tr_nets 20 --mis_l 0 --con_e 0 --chosen_leaves 1
+python run_cph.py --data_from_paper 1 --test_path LGT --inst 1 --n_trees 50 --n_leaves 20 --n_rets 10 --n_tr_nets 20 --mis_l 0 --con_e 0 --chosen_leaves 1
 ```
 
